@@ -76,22 +76,34 @@ resource "aws_instance" "comportamiento" {
   vpc_security_group_ids      = [aws_security_group.comportamiento_sg.id]
   associate_public_ip_address = true
 
-  user_data = <<-EOF
+user_data = <<-EOF
     #!/bin/bash
     set -eux
 
-    apt-get update
-    apt-get install -y docker.io docker-compose-plugin git
+    export DEBIAN_FRONTEND=noninteractive
+
+    # función de retry para apt
+    retry() {
+      for i in 1 2 3; do
+        "$@" && return 0 || sleep 5
+      done
+      return 1
+    }
+
+    retry apt-get update
+    retry apt-get install -y --no-install-recommends docker.io docker-compose-plugin git
 
     systemctl enable --now docker
 
-    # usuario por defecto probable en Debian AWS
-    USERNAME="debian"
-    if id admin >/dev/null 2>&1; then USERNAME="admin"; fi
+    # Usuario por defecto (si existe admin, úsalo; si no, debian)
+    USERNAME="debian"; id admin >/dev/null 2>&1 && USERNAME="admin" || true
+
     usermod -aG docker $${USERNAME}
 
+    # clonar repo en HOME del usuario
     su - $${USERNAME} -c "rm -rf ~/cloud_dev_api && git clone ${var.repo_url} ~/cloud_dev_api"
 
+    # docker-compose.yml SOLO para comportamiento
     cat >/home/$${USERNAME}/cloud_dev_api/comportamiento/docker-compose.yml << 'YAML'
     version: "3.9"
     services:
@@ -106,6 +118,9 @@ resource "aws_instance" "comportamiento" {
         restart: unless-stopped
     YAML
 
+    chown -R $${USERNAME}:$${USERNAME} /home/$${USERNAME}/cloud_dev_api
+
+    # build + up como el usuario normal (no root)
     su - $${USERNAME} -c "cd ~/cloud_dev_api/comportamiento && docker compose up -d --build"
   EOF
 
