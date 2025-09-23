@@ -1,0 +1,13 @@
+cat > docker-compose.yml << 'EOF'
+version: "3.9"
+services:
+  comportamiento:
+    build: .
+    container_name: comportamiento
+    ports:
+      - "8000:80"
+    environment:
+      CLIMA_API_BASE: "http://18.221.212.253:8001/clima"
+      TEMBLOR_API_BASE: "http://18.221.212.253:8002/temblor"
+    restart: unless-stopped
+EOF
