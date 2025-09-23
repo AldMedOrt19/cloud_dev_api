@@ -1,0 +1,24 @@
+name: elia
+
+services:
+  clima:
+    build:
+      context: ./clima
+    container_name: clima
+    ports:
+      - "8001:80"
+    networks: [backend]
+    restart: unless-stopped
+
+  proyeccion_temblor:
+    build:
+      context: ./proyeccion_temblor
+    container_name: proyeccion_temblor
+    ports:
+      - "8002:80"
+    networks: [backend]
+    restart: unless-stopped
+    
+networks:
+  backend:
+    driver: bridge
