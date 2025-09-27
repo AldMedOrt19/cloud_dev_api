@@ -18,7 +18,6 @@ services:
       - "8002:80"
     networks: [backend]
     restart: unless-stopped
-    
 networks:
   backend:
     driver: bridge

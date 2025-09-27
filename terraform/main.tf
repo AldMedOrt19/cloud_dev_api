@@ -25,14 +25,13 @@ data "aws_subnets" "default" {
   }
 }
 
-# AMI Debian 13 oficial (más reciente)
-data "aws_ami" "debian" {
+data "aws_ami" "ubuntu" {
   most_recent = true
-  owners      = ["136693071363"] # Debian
+  owners      = ["099720109477"]
 
   filter {
     name   = "name"
-    values = ["debian-13-amd64-*"]
+    values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
   }
 }
 
@@ -69,14 +68,14 @@ resource "aws_security_group" "comportamiento_sg" {
 
 # EC2 B (Aldana) que despliega 'comportamiento'
 resource "aws_instance" "comportamiento" {
-  ami                         = data.aws_ami.debian.id
+  ami                         = data.aws_ami.ubuntu.id
   instance_type               = var.instance_type
   key_name                    = var.key_name
   subnet_id                   = data.aws_subnets.default.ids[0]
   vpc_security_group_ids      = [aws_security_group.comportamiento_sg.id]
   associate_public_ip_address = true
 
-user_data = <<-EOF
+  user_data = <<-EOF
     #!/bin/bash
     set -eux
 
@@ -91,20 +90,21 @@ user_data = <<-EOF
     }
 
     retry apt-get update
-    retry apt-get install -y --no-install-recommends docker.io docker-compose-plugin git
+    # Corregido: Se instala 'docker-compose' en lugar de 'docker-compose-plugin'
+    retry apt-get install -y --no-install-recommends docker.io docker-compose git
 
     systemctl enable --now docker
 
-    # Usuario por defecto (si existe admin, úsalo; si no, debian)
-    USERNAME="debian"; id admin >/dev/null 2>&1 && USERNAME="admin" || true
+    # En Ubuntu, el usuario por defecto es 'ubuntu'
+    USERNAME="ubuntu"
 
-    usermod -aG docker $${USERNAME}
+    usermod -aG docker $USERNAME
 
     # clonar repo en HOME del usuario
-    su - $${USERNAME} -c "rm -rf ~/cloud_dev_api && git clone ${var.repo_url} ~/cloud_dev_api"
+    su - $USERNAME -c "rm -rf ~/cloud_dev_api && git clone ${var.repo_url} ~/cloud_dev_api"
 
     # docker-compose.yml SOLO para comportamiento
-    cat >/home/$${USERNAME}/cloud_dev_api/comportamiento/docker-compose.yml << 'YAML'
+    cat >/home/$USERNAME/cloud_dev_api/comportamiento/docker-compose.yml << YAML
     version: "3.9"
     services:
       comportamiento:
@@ -118,20 +118,13 @@ user_data = <<-EOF
         restart: unless-stopped
     YAML
 
-    chown -R $${USERNAME}:$${USERNAME} /home/$${USERNAME}/cloud_dev_api
+    chown -R $USERNAME:$USERNAME /home/$USERNAME/cloud_dev_api
 
     # build + up como el usuario normal (no root)
-    su - $${USERNAME} -c "cd ~/cloud_dev_api/comportamiento && docker compose up -d --build"
+    su - $USERNAME -c "cd ~/cloud_dev_api/comportamiento && docker-compose up -d --build"
   EOF
 
   tags = {
     Name = "aldana-comportamiento"
   }
 }
-
-# (Opcional) Elastic IP
-# resource "aws_eip" "comportamiento_eip" {
-#   domain   = "vpc"
-#   instance = aws_instance.comportamiento.id
-#   tags = { Name = "aldana-comportamiento-eip" }
-# }
